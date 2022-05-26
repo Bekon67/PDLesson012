@@ -17,9 +17,10 @@ async def index():
 @app.post('/cats/cats')
 def create_item(name: str = Form(...), breed: str = Form(...), age: int = Form(...)):
     print(name, breed, age, sep='\n')
-    # cat = create_cats(date.dict())
-    # url = f'http://127.0.0.1:8000/cats/cats/{cat.id}'
-    # return Out(name=cat.name, breed=cat.breed, age=cat.age, url=url)
+    data = dict(name=name, breed=breed, age=age)
+    cat = create_cats(data)
+    url = f'http://127.0.0.1:8000/cats/cats/{cat.id}'
+    return Out(name=cat.name, breed=cat.breed, age=cat.age, url=url)
 
 
 @app.get('/cats/cats')

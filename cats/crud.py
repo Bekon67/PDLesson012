@@ -2,7 +2,7 @@ from models import db, Cats
 
 
 def create_cats(data):
-    return Cats.create(**data.dict())
+    return Cats.create(**data)
 
 
 def get_all():
