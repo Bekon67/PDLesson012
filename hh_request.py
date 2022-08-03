@@ -4,7 +4,7 @@ from requests import get
 
 
 url = 'https://api.hh.ru/vacancies'
-params = {'text': 'python'}
+params = {'text': 'Unreal junior'}
 res = get(url, params=params).json()
 print(res['found'])
 pprint(res['items'])

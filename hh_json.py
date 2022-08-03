@@ -4,45 +4,43 @@ from os.path import exists
 import re
 from collections import Counter
 from json import dump as jdump
-
 from requests import get
 from pycbrf import ExchangeRates
+from functions_hh import salary_processing
 
-#  ввод интерисующей вакансии
+#  ввод интерeсующей вакансии
 vacancy = input('Введите интересующую вакансию: ')
+limit_pages = int(input('Введите интерecующее число страниц: '))
+limit_skills = int(input('Введите интерecующее число навыков: '))
 url = 'https://api.hh.ru/vacancies'
-rate = ExchangeRates() # загрузка текущих курсов валют
+rate = ExchangeRates()  # загрузка текущих курсов валют
 # загрузка файла с цифровыми кодами
 if exists('area.pkl'):
     with open('area.pkl', mode='rb') as f:
         area = load(f)
 else:
     area = {}
-p = {'text': vacancy}
-r = get(url=url, params=p).json()
-# pprint(r)
-count_pages = r['pages']
-all_count = len(r['items'])
-result = {
-        'keywords': vacancy,
-        'count': all_count}
+answer = get(url=url, params={'text': vacancy}).json()
+pprint(answer)
+count_pages = answer['pages']
+result = {'keywords': vacancy,
+          'count': 0}
 sal = {'from': [], 'to': []}
-skillis = []
+skills_all = []
 # сначала выявляем сколько будет получено страниц
 # и готовим нужные переменные. А затем проходим по каждой из полученных страниц.
 for page in range(count_pages):
-    if page > 2:
+    if page > limit_pages - 1:
         break
     else:
         print(f"Обрабатывается страница {page}")
     p = {'text': vacancy,
          'page': page}
-    ress = get(url=url, params=p).json()
-    all_count = len(ress['items'])
-    result['count'] += all_count
-    for res in ress['items']:
+    count_on_page = len(answer['items'])
+    result['count'] += count_on_page
+    for res in answer['items']:
         # pprint(res)
-        skills = set()
+        skills_set = set()  # TODO переменная точно только к одной вакансии относится?
         city_vac = res['area']['name']
         # добавление города из ответа на запроса, если его нет в файле.
         if city_vac not in area:
@@ -50,46 +48,43 @@ for page in range(count_pages):
         ar = res['area']
         res_full = get(res['url']).json()
         # pprint(res_full)
-        #  обработка описания вакансии
+
+        #  обработка описания вакансии. Вытаскивание английских слов из описания вакансии
+        #  предполагается, что это навыки для IT
         pp = res_full['description']
         # print(pp)
         pp_re = re.findall(r'\s[A-Za-z-?]+', pp)
         # print(pp_re)
         its = set(x.strip(' -').lower() for x in pp_re)
         # print(its)
+
+        # формирование списка навыков из официальных и вытащенных из описания
         for sk in res_full['key_skills']:
-            skillis.append(sk['name'].lower())
-            skills.add(sk['name'].lower())
+            skills_all.append(sk['name'].lower())
+            skills_set.add(sk['name'].lower())
         # skills |= sk1
         for it in its:
-            if not any(it in x for x in skills):
-                skillis.append(it)
-        #окончание формирования списка навыков
+            if not any(it in x for x in skills_set):
+                skills_all.append(it)
+        # окончание формирования списка навыков
+
         # обработка заплаты
-        if res_full['salary']:
-            code = res_full['salary']['currency']
-            if rate[code] is None:
-                code = 'RUR'
-            k = 1 if code == 'RUR' else float(rate[code].value)
-            sal['from'].append(k * res_full['salary']['from'] if res['salary']['from'] else k * res_full['salary']['to'])
-            sal['to'].append(k * res_full['salary']['to'] if res['salary']['to'] else k*res_full['salary']['from'])
+        sal = salary_processing(res_full, res, sal, rate)
+
 # print(skillis)
-sk2 = Counter(skillis)
+sk2 = Counter(skills_all)
 # pprint(sk2)
+skills_out = [{'name': name, 'count': count, 'percent': round((count / result['count']) * 100, 2)}
+              for name, count in sk2.most_common(limit_skills)]
 up = sum(sal['from']) / len(sal['from'])
 down = sum(sal['to']) / len(sal['to'])
-result.update({'down': round(up, 2),
-               'up': round(down, 2)})
-add = []
-for name, count in sk2.most_common(5):
-    add.append({'name': name,
-                'count': count,
-                'percent': round((count / result['count'])*100, 2)})
-result['requirements'] = add
+result.update({'salary_down': round(up, 2),
+               'salary_up': round(down, 2),
+               'requirements': skills_out})
+
 pprint(result)
 # сохранение файла с результами работы
 with open('result.json', mode='w') as f:
     jdump([result], f)
 with open('area.pkl', mode='wb') as f:
     dump(area, f)
-
